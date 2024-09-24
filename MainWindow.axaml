@@ -1,0 +1,48 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        mc:Ignorable="d" d:DesignWidth="800" d:DesignHeight="450"
+        x:Class="PumpSimulator.MainWindow"
+        Title="Pump Simulator">
+
+    <Grid Margin="20">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <StackPanel Grid.Row="0" Grid.Column="0" Spacing="10">
+            <TextBlock Text="Pump:"/>
+            <ComboBox x:Name="PumpComboBox" Width="200"/>
+            
+            <TextBlock Text="Attendant:"/>
+            <TextBox x:Name="AttendantTextBox" Width="200"/>
+            
+            <TextBlock Text="Fuel Type:"/>
+            <ComboBox x:Name="FuelTypeComboBox" Width="200"/>
+            
+            <TextBlock Text="Processed:"/>
+            <CheckBox x:Name="ProcessedCheckBox"/>
+            
+            <TextBlock Text="Liters:"/>
+            <NumericUpDown x:Name="LitersNumericUpDown" Width="200" Minimum="0" Maximum="1000" Increment="0.1"/>
+            
+            <Button x:Name="SubmitButton" Content="Submit" Width="200" HorizontalAlignment="Left"/>
+        </StackPanel>
+
+        <StackPanel Grid.Row="0" Grid.Column="1" Spacing="10">
+            <TextBlock Text="Total Unprocessed:"/>
+            <TextBlock x:Name="TotalUnprocessedTextBlock" FontWeight="Bold"/>
+        </StackPanel>
+
+        <TextBlock Grid.Row="1" Grid.ColumnSpan="2" Text="Unprocessed Transactions:" FontWeight="Bold" Margin="0,20,0,10"/>
+        
+        <ListBox x:Name="TransactionsListBox" Grid.Row="2" Grid.ColumnSpan="2"/>
+    </Grid>
+</Window>

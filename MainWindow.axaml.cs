@@ -1,15 +1,15 @@
-using System;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
-using Newtonsoft.Json;
-using System.Collections.Generic;
-using System.Linq;
+using System;
+using System.Collections.ObjectModel;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
-using System.Collections.ObjectModel;
+using Newtonsoft.Json;
+using System.Linq;
+using System.Collections.Generic;
 
 namespace PumpSimulator
 {
@@ -50,10 +50,10 @@ namespace PumpSimulator
             errorTextBlock = this.FindControl<TextBlock>("ErrorTextBlock");
 
             if (pumpComboBox != null)
+            {
                 pumpComboBox.ItemsSource = await FetchPumpsAsync();
-
-            if (nozzleComboBox != null)
-                nozzleComboBox.ItemsSource = await FetchNozzlesAsync();
+                pumpComboBox.SelectionChanged += PumpComboBox_SelectionChanged;
+            }
 
             if (fuelTypeComboBox != null)
                 fuelTypeComboBox.ItemsSource = await FetchFuelTypesAsync();
@@ -64,70 +64,124 @@ namespace PumpSimulator
             UpdateTotalUnprocessed();
         }
 
+        private async void PumpComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (pumpComboBox.SelectedItem is Pump selectedPump)
+            {
+                nozzleComboBox.ItemsSource = await FetchNozzlesForPumpAsync(selectedPump.Id);
+            }
+        }
+
         private async void SubmitButton_Click(object sender, RoutedEventArgs e)
         {
+            if (pumpComboBox == null || pumpComboBox.SelectedItem == null)
+            {
+                SetErrorMessage("Please select a pump.");
+                return;
+            }
+
+            if (nozzleComboBox == null || nozzleComboBox.SelectedItem == null)
+            {
+                SetErrorMessage("Please select a nozzle.");
+                return;
+            }
+
+            if (fuelTypeComboBox == null || fuelTypeComboBox.SelectedItem == null)
+            {
+                SetErrorMessage("Please select a fuel type.");
+                return;
+            }
+
+            var selectedPump = pumpComboBox.SelectedItem as Pump;
+            var selectedNozzle = nozzleComboBox.SelectedItem as NozzleItem;
+            var selectedFuelType = fuelTypeComboBox.SelectedItem as FuelType;
+
+            if (selectedPump == null || selectedNozzle == null || selectedFuelType == null)
+            {
+                SetErrorMessage("Invalid selection. Please try again.");
+                return;
+            }
+
             var transaction = new Transaction
             {
-                PumpId = ((Pump)pumpComboBox?.SelectedItem)?.Id ?? 0,
-                NozzleId = ((NozzleItem)nozzleComboBox?.SelectedItem)?.Id ?? 0,
-                AttendantName = attendantTextBox?.Text,
-                FuelTypeId = ((FuelType)fuelTypeComboBox?.SelectedItem)?.Id ?? 0,
+                Pump = selectedPump.Id,
+                Nozzle = selectedNozzle.Id,
+                Attendant = attendantTextBox?.Text,
+                FuelType = selectedFuelType.Id,
                 Volume = (float)(litersNumericUpDown?.Value ?? 0),
-                TotalCost = CalculateTotalCost()
+                TotalCost = CalculateTotalCost(selectedFuelType)
             };
-        
+
             unprocessedTransactions.Add(transaction);
             UpdateTotalUnprocessed();
-        
-            // Log transaction to API
+
             var success = await LogTransactionAsync(transaction);
             if (!success)
             {
-                errorTextBlock.Text = "Failed to log transaction. Please try again.";
+                SetErrorMessage("Failed to log transaction. Please try again.");
             }
             else
             {
-                errorTextBlock.Text = "";
+                SetErrorMessage(""); // Clear error message on success
             }
-        
+
             ClearInputs();
         }
-        
-        private float CalculateTotalCost()
+
+        private float CalculateTotalCost(FuelType selectedFuelType)
         {
-            var selectedFuelType = (FuelType)fuelTypeComboBox?.SelectedItem;
             var liters = (float)(litersNumericUpDown?.Value ?? 0);
-            return selectedFuelType != null ? liters * selectedFuelType.FuelPrice : 0;
+            return liters * selectedFuelType.FuelPrice;
         }
-        
+
         private async Task<bool> LogTransactionAsync(Transaction transaction)
         {
-            try
+            var jsonObject = new
             {
-                using (var client = new HttpClient())
+                pump = transaction.Pump,
+                nozzle = transaction.Nozzle,
+                attendant = transaction.Attendant,
+                fuel_type = transaction.FuelType,
+                volume = transaction.Volume,
+                total_cost = transaction.TotalCost
+            };
+
+            var jsonContent = JsonConvert.SerializeObject(jsonObject);
+
+            using (var client = new HttpClient())
+            {
+                client.BaseAddress = new Uri("http://127.0.0.1:8000/backoffice/");
+                var content = new StringContent(jsonContent, Encoding.UTF8, "application/json");
+                
+                try
                 {
-                    client.BaseAddress = new Uri("http://127.0.0.1:8000/backoffice/");
-                    var json = JsonConvert.SerializeObject(new
-                    {
-                        pump_id = transaction.PumpId,
-                        nozzle_id = transaction.NozzleId,
-                        attendant_name = transaction.AttendantName,
-                        fuel_type_id = transaction.FuelTypeId,
-                        volume = transaction.Volume,
-                        total_cost = transaction.TotalCost
-                    });
-                    Console.WriteLine($"Sending transaction data: {json}");
-                    var content = new StringContent(json, Encoding.UTF8, "application/json");
                     var response = await client.PostAsync("api/transactions/", content);
-                    var responseContent = await response.Content.ReadAsStringAsync();
-                    Console.WriteLine($"API response: {response.StatusCode}, Content: {responseContent}");
-                    return response.IsSuccessStatusCode;
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        Console.WriteLine("Transaction logged successfully.");
+                        return true;
+                    }
+                    else
+                    {
+                        var errorContent = await response.Content.ReadAsStringAsync();
+                        Console.WriteLine($"API response: {response.StatusCode}, {errorContent}");
+                        SetErrorMessage($"Failed to log transaction: {errorContent}");
+                        return false;
+                    }
                 }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"Error in LogTransactionAsync: {ex.Message}");
-                return false;
+                catch (HttpRequestException e)
+                {
+                    Console.WriteLine($"HTTP Request Exception: {e.Message}");
+                    SetErrorMessage($"Network error: {e.Message}");
+                    return false;
+                }
+                catch (Exception e)
+                {
+                    Console.WriteLine($"Unexpected error: {e.Message}");
+                    SetErrorMessage($"An unexpected error occurred: {e.Message}");
+                    return false;
+                }
             }
         }
 
@@ -155,14 +209,14 @@ namespace PumpSimulator
                     Console.WriteLine("Received empty response from API for pumps");
                     return new List<Pump>();
                 }
-        
+
                 var pumpData = JsonConvert.DeserializeObject<List<dynamic>>(json);
                 if (pumpData == null)
                 {
                     Console.WriteLine("Failed to deserialize JSON response for pumps");
                     return new List<Pump>();
                 }
-        
+
                 return pumpData.Select(p => new Pump
                 {
                     Id = p.id != null ? Convert.ToInt32(p.id) : 0,
@@ -177,41 +231,36 @@ namespace PumpSimulator
             }
         }
 
-        private async Task<List<NozzleItem>> FetchNozzlesAsync()
+        private async Task<List<NozzleItem>> FetchNozzlesForPumpAsync(int pumpId)
         {
             try
             {
-                var json = await FetchDataAsync("api/nozzles/");
+                var json = await FetchDataAsync($"api/nozzles/?pump={pumpId}");
                 if (string.IsNullOrEmpty(json))
                 {
-                    Console.WriteLine("Received empty response from API for nozzles");
+                    Console.WriteLine($"Received empty response from API for nozzles of pump {pumpId}");
                     return new List<NozzleItem>();
                 }
-        
+
                 var nozzleData = JsonConvert.DeserializeObject<List<dynamic>>(json);
                 if (nozzleData == null)
                 {
-                    Console.WriteLine("Failed to deserialize JSON response for nozzles");
+                    Console.WriteLine($"Failed to deserialize JSON response for nozzles of pump {pumpId}");
                     return new List<NozzleItem>();
                 }
-        
+
                 return nozzleData.Select(n => new NozzleItem
                 {
                     Id = n.id != null ? Convert.ToInt32(n.id) : 0,
-                    NozzleName = n.nozzle_name != null ? Convert.ToInt32(n.nozzle_name) : 0,
-                    PumpId = n.pump != null ? Convert.ToInt32(n.pump) : 0,
-                    AttendantId = n.attendant != null ? (int?)Convert.ToInt32(n.attendant) : null,
-                    FuelTypeId = n.fuel_type != null ? (int?)Convert.ToInt32(n.fuel_type) : null,
-                    Processed = n.processed != null ? Convert.ToBoolean(n.processed) : false
+                    NozzleName = n.nozzle_name != null ? Convert.ToString(n.nozzle_name) : string.Empty
                 }).ToList();
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Error in FetchNozzlesAsync: {ex.Message}");
+                Console.WriteLine($"Error in FetchNozzlesForPumpAsync: {ex.Message}");
                 return new List<NozzleItem>();
             }
         }
-
 
         private async Task<List<FuelType>> FetchFuelTypesAsync()
         {
@@ -223,19 +272,19 @@ namespace PumpSimulator
                     Console.WriteLine("Received empty response from API for fuel types");
                     return new List<FuelType>();
                 }
-        
+
                 var fuelTypeData = JsonConvert.DeserializeObject<List<dynamic>>(json);
                 if (fuelTypeData == null)
                 {
                     Console.WriteLine("Failed to deserialize JSON response for fuel types");
                     return new List<FuelType>();
                 }
-        
+
                 return fuelTypeData.Select(f => new FuelType
                 {
                     Id = f.id != null ? Convert.ToInt32(f.id) : 0,
                     FuelTypeName = f.fuel_type != null ? Convert.ToString(f.fuel_type) : string.Empty,
-                    FuelPrice = 0.0f // We don't have this information in the current API response
+                    FuelPrice = f.fuel_price != null ? Convert.ToSingle(f.fuel_price) : 0.0f
                 }).ToList();
             }
             catch (Exception ex)
@@ -262,41 +311,46 @@ namespace PumpSimulator
             }
         }
 
+        private void SetErrorMessage(string message)
+        {
+            if (errorTextBlock != null)
+            {
+                errorTextBlock.Text = message;
+            }
+            else
+            {
+                Console.WriteLine($"Error: {message}");
+            }
+        }
+    }
 
-        public class Pump
-        {
-            public int Id { get; set; }
-            public int PumpNumber { get; set; }
-            public int TankInfo { get; set; }
-        }
-        
-        public class NozzleItem
-        {
-            public int Id { get; set; }
-            public int NozzleName { get; set; }
-            public int PumpId { get; set; }
-            public int? AttendantId { get; set; }
-            public int? FuelTypeId { get; set; }
-            public bool Processed { get; set; }
-        }
-        
-        public class FuelType
-        {
-            public int Id { get; set; }
-            public string FuelTypeName { get; set; }
-            public float FuelPrice { get; set; }
-        }
+    public class Pump
+    {
+        public int Id { get; set; }
+        public int PumpNumber { get; set; }
+        public int TankInfo { get; set; }
+    }
 
-        public class Transaction
-        {
-            public int PumpId { get; set; }
-            public int NozzleId { get; set; }
-            public string AttendantName { get; set; }
-            public int FuelTypeId { get; set; }
-            public float Volume { get; set; }
-            public float TotalCost { get; set; }
-        }
-        
+    public class NozzleItem
+    {
+        public int Id { get; set; }
+        public string NozzleName { get; set; }
+    }
+
+    public class FuelType
+    {
+        public int Id { get; set; }
+        public string FuelTypeName { get; set; }
+        public float FuelPrice { get; set; }
+    }
+
+    public class Transaction
+    {
+        public int Pump { get; set; }
+        public int Nozzle { get; set; }
+        public string Attendant { get; set; }
+        public int FuelType { get; set; }
+        public float Volume { get; set; }
+        public float TotalCost { get; set; }
     }
 }
-        

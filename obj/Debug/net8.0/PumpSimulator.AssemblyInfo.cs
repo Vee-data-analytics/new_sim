@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PumpSimulator")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+090538ca59f48b9bde839cc73174861ecc44b283")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+abdc94eb1d7fc46ca93c8b0a7c17eb2e6f013c67")]
 [assembly: System.Reflection.AssemblyProductAttribute("PumpSimulator")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PumpSimulator")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

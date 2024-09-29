@@ -21,6 +21,9 @@
             <TextBlock Text="Pump:"/>
             <ComboBox x:Name="PumpComboBox" Width="200"/>
             
+            <TextBlock Text="Nozzle:"/>
+            <ComboBox x:Name="NozzleComboBox" Width="200"/>
+
             <TextBlock Text="Attendant:"/>
             <TextBox x:Name="AttendantTextBox" Width="200"/>
             
